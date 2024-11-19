@@ -1,0 +1,4 @@
+tqdm
+mpi4py
+jaxlib
+jax
