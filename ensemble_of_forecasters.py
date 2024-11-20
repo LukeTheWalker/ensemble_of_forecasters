@@ -2,6 +2,8 @@ from mpi4py import MPI
 import jax
 import jax.numpy as jnp
 from tqdm import tqdm
+import numpy as np
+from tempfile import TemporaryFile
 
 # MPI Initialization
 comm = MPI.COMM_WORLD
@@ -50,6 +52,9 @@ noise_std = 0.1
 local_forecasters = num_forecaster // size  # Split the work equally
 
 aggregated_forecasting_local = []
+aggregated_weights_local = []
+aggregated_biases_local = []
+
 
 for i in tqdm(range(rank * local_forecasters, (rank + 1) * local_forecasters)):
     key = jax.random.PRNGKey(i)
@@ -60,19 +65,29 @@ for i in tqdm(range(rank * local_forecasters, (rank + 1) * local_forecasters)):
     b_init = b + b_noise
 
     W_trained, b_trained = training_loop(grad, 20, W_init, b_init, X, y)
+    aggregated_weights_local.append(W_trained)
+    aggregated_biases_local.append(b_trained)
     y_predicted = forecast(5, X, W_trained, b_trained)
     aggregated_forecasting_local.append(y_predicted)
 
 # Gather results from all processes
 aggregated_forecasting_global = comm.gather(aggregated_forecasting_local, root=0)
+aggregated_weights_global = comm.gather(aggregated_weights_local, root=0)
+aggregated_biases_global = comm.gather(aggregated_biases_local, root=0)
 
 if rank == 0:
     print(rank)
 
     # Flatten results
     aggregated_forecasting_global = jnp.concatenate([jnp.array(f) for f in aggregated_forecasting_global], axis=0)
-    print(aggregated_forecasting_global.shape)
+    #print(aggregated_forecasting_global.shape)
+    aggregated_weights_global = jnp.concatenate([jnp.array(f) for f in aggregated_weights_global], axis=0)
+    aggregated_biases_global = jnp.concatenate([jnp.array(f) for f in aggregated_biases_global], axis=0)
 
+    np.save("forecast", aggregated_forecasting_global)
+    np.save("weights", aggregated_weights_global)
+    np.save("biases", aggregated_biases_global)
+    
     # Compute Statistics
     print(f"5th percentile: {jnp.percentile(aggregated_forecasting_global, 5, axis=0)}")
     print(f"95th percentile: {jnp.percentile(aggregated_forecasting_global, 95, axis=0)}")
