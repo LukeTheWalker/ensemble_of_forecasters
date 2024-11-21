@@ -2,3 +2,5 @@ tqdm
 mpi4py
 jaxlib
 jax
+numpy
+matplotlib
