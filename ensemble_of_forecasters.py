@@ -4,6 +4,7 @@ import jax.numpy as jnp
 from tqdm import tqdm
 import numpy as np
 from tempfile import TemporaryFile
+import sys
 
 # MPI Initialization
 comm = MPI.COMM_WORLD
@@ -47,16 +48,22 @@ def training_loop(grad: callable, num_epochs: int, W: jnp.array, b: jnp.array, X
     return W, b
 
 # Parallel Ensemble of Forecasters
-num_forecaster = int(100)
+num_forecaster = int(sys.argv[1])  # Number of forecasters
 noise_std = 0.1
 local_forecasters = num_forecaster // size  # Split the work equally
+local_forecasters += 1 if rank < num_forecaster % size else 0  # Distribute the remaining work
 
 aggregated_forecasting_local = []
 aggregated_weights_local = []
 aggregated_biases_local = []
 
 
-for i in tqdm(range(rank * local_forecasters, (rank + 1) * local_forecasters)):
+if rank == 0:
+    pbar = tqdm(total = num_forecaster)
+
+for i in range(rank * local_forecasters, (rank + 1) * local_forecasters):
+    if rank == 0:
+        pbar.update(size)
     key = jax.random.PRNGKey(i)
     W_noise = jax.random.normal(key, W.shape) * noise_std
     b_noise = jax.random.normal(key, b.shape) * noise_std
@@ -70,28 +77,33 @@ for i in tqdm(range(rank * local_forecasters, (rank + 1) * local_forecasters)):
     y_predicted = forecast(5, X, W_trained, b_trained)
     aggregated_forecasting_local.append(y_predicted)
 
+print("Rank", rank, "done local forecasting")
+
 # Gather results from all processes
 aggregated_forecasting_global = comm.gather(aggregated_forecasting_local, root=0)
-aggregated_weights_global = comm.gather(aggregated_weights_local, root=0)
-aggregated_biases_global = comm.gather(aggregated_biases_local, root=0)
+aggregated_weights_global     = comm.gather(aggregated_weights_local, root=0)
+aggregated_biases_global      = comm.gather(aggregated_biases_local, root=0)
 
 if rank == 0:
-    print(rank)
+    data_folder = "data/"
 
     # Flatten results
     aggregated_forecasting_global = jnp.concatenate([jnp.array(f) for f in aggregated_forecasting_global], axis=0)
-    #print(aggregated_forecasting_global.shape)
     aggregated_weights_global = jnp.concatenate([jnp.array(f) for f in aggregated_weights_global], axis=0)
     aggregated_biases_global = jnp.concatenate([jnp.array(f) for f in aggregated_biases_global], axis=0)
 
-    np.save("forecast", aggregated_forecasting_global)
-    np.save("weights", aggregated_weights_global)
-    np.save("biases", aggregated_biases_global)
+    print("Aggregated forecasting shape:", aggregated_forecasting_global.shape)
+
+    np.save(data_folder + "forecasting", aggregated_forecasting_global)
+    np.save(data_folder + "weights", aggregated_weights_global)
+    np.save(data_folder + "biases", aggregated_biases_global)
+
+    print("Data saved")
     
     # Compute Statistics
-    print(f"5th percentile: {jnp.percentile(aggregated_forecasting_global, 5, axis=0)}")
-    print(f"95th percentile: {jnp.percentile(aggregated_forecasting_global, 95, axis=0)}")
-    print(f"Median: {jnp.median(aggregated_forecasting_global, axis=0)}")
-    print(f"Mean: {jnp.mean(aggregated_forecasting_global, axis=0)}")
-    print(f"Standard deviation: {jnp.std(aggregated_forecasting_global, axis=0)}")
-    print(f"Error of the ensemble: {jnp.mean((aggregated_forecasting_global - y) ** 2)}")
+    # print(f"5th percentile: {jnp.percentile(aggregated_forecasting_global, 5, axis=0)}")
+    # print(f"95th percentile: {jnp.percentile(aggregated_forecasting_global, 95, axis=0)}")
+    # print(f"Median: {jnp.median(aggregated_forecasting_global, axis=0)}")
+    # print(f"Mean: {jnp.mean(aggregated_forecasting_global, axis=0)}")
+    # print(f"Standard deviation: {jnp.std(aggregated_forecasting_global, axis=0)}")
+    # print(f"Error of the ensemble: {jnp.mean((aggregated_forecasting_global - y) ** 2)}")
