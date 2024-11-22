@@ -13,4 +13,4 @@ cd {current_dir}
 eval "$(micromamba shell hook --shell bash)"
 micromamba activate ensemble_venv
 module load mpi/OpenMPI/4.0.5-GCC-10.2.0
-mpirun -n {world_size} python ensemble_of_forecasters.py {num_forecasters}
+mpirun -n {world_size} python ensemble_of_forecasters.py {num_forecasters} {timings_filename}

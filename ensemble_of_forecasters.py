@@ -5,11 +5,17 @@ from tqdm import tqdm
 import numpy as np
 from tempfile import TemporaryFile
 import sys
+import time
+import os
 
 # MPI Initialization
 comm = MPI.COMM_WORLD
 rank = comm.Get_rank()  # Rank of the current process
 size = comm.Get_size()  # Total number of processes
+
+if rank == 0:
+    timings_filename = sys.argv[2]
+    start_time = time.time()
 
 # Model and Data Initialization
 X = jnp.array([[0.1, 0.4], [0.1, 0.5], [0.1, 0.6]])  # Input
@@ -58,12 +64,12 @@ aggregated_weights_local = []
 aggregated_biases_local = []
 
 
-if rank == 0:
-    pbar = tqdm(total = num_forecaster)
+# if rank == 0:
+#     pbar = tqdm(total = num_forecaster)
 
 for i in range(rank * local_forecasters, (rank + 1) * local_forecasters):
-    if rank == 0:
-        pbar.update(size)
+    # if rank == 0:
+    #     pbar.update(size)
     key = jax.random.PRNGKey(i)
     W_noise = jax.random.normal(key, W.shape) * noise_std
     b_noise = jax.random.normal(key, b.shape) * noise_std
@@ -77,7 +83,7 @@ for i in range(rank * local_forecasters, (rank + 1) * local_forecasters):
     y_predicted = forecast(5, X, W_trained, b_trained)
     aggregated_forecasting_local.append(y_predicted)
 
-print("Rank", rank, "done local forecasting")
+# print("Rank", rank, "done local forecasting")
 
 # Gather results from all processes
 aggregated_forecasting_global = comm.gather(aggregated_forecasting_local, root=0)
@@ -107,3 +113,11 @@ if rank == 0:
     # print(f"Mean: {jnp.mean(aggregated_forecasting_global, axis=0)}")
     # print(f"Standard deviation: {jnp.std(aggregated_forecasting_global, axis=0)}")
     # print(f"Error of the ensemble: {jnp.mean((aggregated_forecasting_global - y) ** 2)}")
+
+    end_time = time.time()
+    execution_time = end_time - start_time
+
+    # Save execution time with unique identifier
+    with open(f"{timings_filename}", "w") as f:
+        f.write(str(execution_time))
+
