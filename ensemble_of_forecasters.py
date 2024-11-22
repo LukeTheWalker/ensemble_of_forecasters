@@ -14,7 +14,7 @@ rank = comm.Get_rank()  # Rank of the current process
 size = comm.Get_size()  # Total number of processes
 
 if rank == 0:
-    timings_filename = sys.argv[2]
+    data_folder = sys.argv[2]
     start_time = time.time()
 
 # Model and Data Initialization
@@ -91,7 +91,6 @@ aggregated_weights_global     = comm.gather(aggregated_weights_local, root=0)
 aggregated_biases_global      = comm.gather(aggregated_biases_local, root=0)
 
 if rank == 0:
-    data_folder = "data/"
 
     # Flatten results
     aggregated_forecasting_global = jnp.concatenate([jnp.array(f) for f in aggregated_forecasting_global], axis=0)
@@ -100,24 +99,16 @@ if rank == 0:
 
     print("Aggregated forecasting shape:", aggregated_forecasting_global.shape)
 
-    np.save(data_folder + "forecasting", aggregated_forecasting_global)
-    np.save(data_folder + "weights", aggregated_weights_global)
-    np.save(data_folder + "biases", aggregated_biases_global)
+    np.save(data_folder + "/forecasting", aggregated_forecasting_global)
+    np.save(data_folder + "/weights", aggregated_weights_global)
+    np.save(data_folder + "/biases", aggregated_biases_global)
 
     print("Data saved")
-    
-    # Compute Statistics
-    # print(f"5th percentile: {jnp.percentile(aggregated_forecasting_global, 5, axis=0)}")
-    # print(f"95th percentile: {jnp.percentile(aggregated_forecasting_global, 95, axis=0)}")
-    # print(f"Median: {jnp.median(aggregated_forecasting_global, axis=0)}")
-    # print(f"Mean: {jnp.mean(aggregated_forecasting_global, axis=0)}")
-    # print(f"Standard deviation: {jnp.std(aggregated_forecasting_global, axis=0)}")
-    # print(f"Error of the ensemble: {jnp.mean((aggregated_forecasting_global - y) ** 2)}")
 
     end_time = time.time()
     execution_time = end_time - start_time
 
     # Save execution time with unique identifier
-    with open(f"{timings_filename}", "w") as f:
+    with open(f"{data_folder}/timings.txt", "w") as f:
         f.write(str(execution_time))
 
