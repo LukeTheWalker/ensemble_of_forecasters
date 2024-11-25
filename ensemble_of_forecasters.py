@@ -17,6 +17,9 @@ if rank == 0:
     data_folder = sys.argv[2]
     start_time = time.time()
 
+# Measure CPU time for each rank
+cpu_start_time = time.time()
+
 # Model and Data Initialization
 X = jnp.array([[0.1, 0.4], [0.1, 0.5], [0.1, 0.6]])  # Input
 y = jnp.array([[0.1, 0.7]])  # Expected output
@@ -63,10 +66,6 @@ aggregated_forecasting_local = []
 aggregated_weights_local = []
 aggregated_biases_local = []
 
-
-# if rank == 0:
-#     pbar = tqdm(total = num_forecaster)
-
 for i in range(rank * local_forecasters, (rank + 1) * local_forecasters):
     # if rank == 0:
     #     pbar.update(size)
@@ -83,12 +82,14 @@ for i in range(rank * local_forecasters, (rank + 1) * local_forecasters):
     y_predicted = forecast(5, X, W_trained, b_trained)
     aggregated_forecasting_local.append(y_predicted)
 
-# print("Rank", rank, "done local forecasting")
+cpu_end_time = time.time()
+cpu_time = cpu_end_time - cpu_start_time
 
 # Gather results from all processes
 aggregated_forecasting_global = comm.gather(aggregated_forecasting_local, root=0)
 aggregated_weights_global     = comm.gather(aggregated_weights_local, root=0)
 aggregated_biases_global      = comm.gather(aggregated_biases_local, root=0)
+cpu_times_global              = comm.gather(cpu_time, root=0)
 
 if rank == 0:
 
@@ -108,7 +109,8 @@ if rank == 0:
     end_time = time.time()
     execution_time = end_time - start_time
 
-    # Save execution time with unique identifier
+    # Save execution time and CPU times with unique identifier
     with open(f"{data_folder}/timings.txt", "w") as f:
-        f.write(str(execution_time))
-
+        f.write(f"Total execution time: {execution_time}\n")
+        for rank_id, cpu_time in enumerate(cpu_times_global):
+            f.write(f"Rank {rank_id}: {cpu_time}\n")
